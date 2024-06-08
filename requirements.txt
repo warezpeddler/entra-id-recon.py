@@ -1,0 +1,11 @@
+argparse
+requests
+json
+re
+dnspython
+prettytable
+xml.etree.ElementTree
+termcolor
+pyfiglet
+pandas
+xlsxwriter
