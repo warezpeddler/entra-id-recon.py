@@ -6,7 +6,7 @@ Entra-ID-Recon.py is a Python script that reimplements some of the reconnaissanc
 - https://aadinternals.com/aadinternals/
 
 ## Credits
-This script is inspired by the original AADInternals project created by Nestori Syynimaa (@DrAzureAD). All ideas and code belong to the original author, this script is a reimplemnation of a very small subet of the original project and was created for educational purposes.
+This script is inspired by the original AADInternals project created by Nestori Syynimaa (@DrAzureAD). All ideas belong to the original author, this script is a reimplementation of a very small subset of the original project and was created for educational purposes.
 
 ## Disclaimer
 - This tool was created for the authors personal learning and for educational purposes, never run this script against an organisation in which you do not have explicit, written permission to conduct a legitimate security audit against.
