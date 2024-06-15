@@ -358,9 +358,9 @@ if __name__ == "__main__":
     recon_parser.add_argument("-e", "--extension", choices=["txt", "json", "csv", "xlsx", "all"], default="", help="Output format")
 
     # Subparser for user enumeration
-    enum_parser = subparsers.add_parser("entra-external-enum", help="Verifies whether a single or multiple emails are active withibn an organisation")
+    enum_parser = subparsers.add_parser("entra-external-enum", help="Verifies whether a single or multiple emails are active within an organisation")
     enum_parser.add_argument("-u", "--username", help="Username (example: user@example.com)")
-    enum_parser.add_argument("-o", "--output", help="Output filename")
+    enum_parser.add_argument("-o", "--output", help="Output filename filename without extension")
     enum_parser.add_argument("-f", "--file", help="Input file with list of email addresses")
     enum_parser.add_argument("-e", "--extension", choices=["txt", "json", "csv", "xlsx", "all"], default="", help="Output format")
     enum_parser.add_argument("-m", "--method", choices=["normal", "login", "autologon"], default="normal", help="Login method")
