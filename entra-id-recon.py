@@ -22,7 +22,7 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 def display_banner():
     banner = pyfiglet.figlet_format("EntraIDRecon.py")
-    cprint(banner, 'green')
+    cprint(banner, "green")
 
 def resolve_dns(domain, record_type):
     try:
@@ -35,35 +35,38 @@ def get_tenant_id(domain):
     openid_config_url = f"https://login.microsoftonline.com/{domain}/.well-known/openid-configuration"
     headers = {"User-Agent": USER_AGENT}
     response = requests.get(openid_config_url, headers=headers)
-    
+
     if response.status_code == 200:
         tenant_info = response.json()
-        issuer_url = tenant_info.get('issuer')
-        tenant_id = issuer_url.split('/')[-2] if issuer_url else None
-        return tenant_id, tenant_info.get('tenant_region_scope')
+        issuer_url = tenant_info.get("issuer")
+        tenant_id = issuer_url.split("/")[-2] if issuer_url else None
+        return tenant_id, tenant_info.get("tenant_region_scope")
     else:
         return None, None
 
 def get_tenant_brand_and_sso(domain):
+    """
+    Given a domain, return (brand_name, desktop_sso_enabled).
+    If the domain is invalid or the request fails, return (None, None).
+    """
     user_realm_url = f"https://login.microsoftonline.com/GetUserRealm.srf?login={domain}"
     headers = {"User-Agent": USER_AGENT}
     response = requests.get(user_realm_url, headers=headers)
-    
+
     if response.status_code == 200:
         login_info = response.json()
-        brand_name = login_info.get('FederationBrandName', None)
-        
-        # Checking Desktop SSO
-        credential_type_url = f"https://login.microsoftonline.com/common/GetCredentialType"
+        brand_name = login_info.get("FederationBrandName", None)
+
+        credential_type_url = "https://login.microsoftonline.com/common/GetCredentialType"
         body = {"Username": domain}
         response_credential = requests.post(credential_type_url, json=body, headers=headers)
-        
+
         if response_credential.status_code == 200:
             credential_info = response_credential.json()
-            desktop_sso_enabled = credential_info.get('EstsProperties', {}).get('DesktopSsoEnabled', False)
+            desktop_sso_enabled = credential_info.get("EstsProperties", {}).get("DesktopSsoEnabled", False)
         else:
             desktop_sso_enabled = False
-        
+
         return brand_name, desktop_sso_enabled
     else:
         return None, None
@@ -72,17 +75,17 @@ def get_tenant_domains(domain):
     openid_config_url = f"https://login.microsoftonline.com/{domain}/.well-known/openid-configuration"
     headers = {"User-Agent": USER_AGENT}
     response = requests.get(openid_config_url, headers=headers)
-    
+
     if response.status_code == 200:
         tenant_info = response.json()
-        tenant_region_sub_scope = tenant_info.get('tenant_region_sub_scope')
-        
+        tenant_region_sub_scope = tenant_info.get("tenant_region_sub_scope")
+
         if tenant_region_sub_scope == "DOD":
-            autodiscover_url = "https://autodiscover-s-dod.office365.us/autodiscover/autodiscover.svc" 
+            autodiscover_url = "https://autodiscover-s-dod.office365.us/autodiscover/autodiscover.svc"
         elif tenant_region_sub_scope == "DODCON":
             autodiscover_url = "https://autodiscover-s.office365.us/autodiscover/autodiscover.svc"
         else:
-            autodiscover_url = "https://autodiscover-s.outlook.com/autodiscover/autodiscover.svc"  
+            autodiscover_url = "https://autodiscover-s.outlook.com/autodiscover/autodiscover.svc"
     else:
         return None
 
@@ -91,9 +94,14 @@ def get_tenant_domains(domain):
         "SOAPAction": '"http://schemas.microsoft.com/exchange/2010/Autodiscover/Autodiscover/GetFederationInformation"',
         "User-Agent": "AutodiscoverClient"
     }
-    
+
     body = f"""
-    <soap:Envelope xmlns:exm="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:ext="http://schemas.microsoft.com/exchange/services/2006/types" xmlns:a="http://www.w3.org/2005/08/addressing" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <soap:Envelope xmlns:exm="http://schemas.microsoft.com/exchange/services/2006/messages"
+                   xmlns:ext="http://schemas.microsoft.com/exchange/services/2006/types"
+                   xmlns:a="http://www.w3.org/2005/08/addressing"
+                   xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:xsd="http://www.w3.org/2001/XMLSchema">
         <soap:Header>
             <a:Action soap:mustUnderstand="1">http://schemas.microsoft.com/exchange/2010/Autodiscover/Autodiscover/GetFederationInformation</a:Action>
             <a:To soap:mustUnderstand="1">{autodiscover_url}</a:To>
@@ -110,24 +118,24 @@ def get_tenant_domains(domain):
         </soap:Body>
     </soap:Envelope>
     """
-    
-    response = requests.post(autodiscover_url, data=body.encode('utf-8'), headers=headers)
-    
+
+    response = requests.post(autodiscover_url, data=body.encode("utf-8"), headers=headers)
+
     if response.status_code == 200:
         try:
             root = ET.fromstring(response.content)
             namespaces = {
-                's': 'http://schemas.xmlsoap.org/soap/envelope/',
-                'a': 'http://www.w3.org/2005/08/addressing',
-                'm': 'http://schemas.microsoft.com/exchange/2010/Autodiscover',
-                't': 'http://schemas.microsoft.com/exchange/2010/Autodiscover'
+                "s": "http://schemas.xmlsoap.org/soap/envelope/",
+                "a": "http://www.w3.org/2005/08/addressing",
+                "m": "http://schemas.microsoft.com/exchange/2010/Autodiscover",
+                "t": "http://schemas.microsoft.com/exchange/2010/Autodiscover"
             }
-            domains_element = root.find('.//t:Domains', namespaces)
-            domain_list = [d.text for d in domains_element.findall('.//t:Domain', namespaces)]
-            
+            domains_element = root.find(".//t:Domains", namespaces)
+            domain_list = [d.text for d in domains_element.findall(".//t:Domain", namespaces)]
+
             if domain not in domain_list:
                 domain_list.append(domain)
-            
+
             return domain_list
         except ET.ParseError as e:
             print(f"Error parsing XML: {e}")
@@ -139,7 +147,6 @@ def get_user_realm_extended(username):
     user_realm_url = f"https://login.microsoftonline.com/GetUserRealm.srf?login={username}"
     headers = {"User-Agent": USER_AGENT}
     response = requests.get(user_realm_url, headers=headers)
-
     if response.status_code == 200:
         return response.json()
     else:
@@ -149,14 +156,14 @@ def get_login_information(username):
     user_realm_url = f"https://login.microsoftonline.com/GetUserRealm.srf?login={username}"
     headers = {"User-Agent": USER_AGENT}
     response = requests.get(user_realm_url, headers=headers)
-    
+
     if response.status_code == 200:
         return response.json()
     else:
         return None
 
 def get_credential_type_info(username):
-    credential_type_url = f"https://login.microsoftonline.com/common/GetCredentialType"
+    credential_type_url = "https://login.microsoftonline.com/common/GetCredentialType"
     body = {
         "username": username,
         "isOtherIdpSupported": True,
@@ -169,13 +176,21 @@ def get_credential_type_info(username):
     }
     headers = {"User-Agent": USER_AGENT}
     response = requests.post(credential_type_url, json=body, headers=headers)
-        
+
     if response.status_code == 200:
         return response.json()
     else:
         return None
 
 def save_output(data, domain_data, base_filename, formats, is_user_enum=False):
+    """
+    Saves the results to files in the specified formats.
+    :param data: The main data (dictionary for recon / list of dict for enumeration).
+    :param domain_data: The domain data (list of dictionaries) if recon, else empty list for user enumeration.
+    :param base_filename: Base name for the output file(s).
+    :param formats: List of formats to save (txt, json, csv, xlsx, or all).
+    :param is_user_enum: Whether it's user enumeration data or recon data.
+    """
     output_data = {"user_list" if is_user_enum else "tenant_info": data}
     if not is_user_enum:
         output_data["domain_data"] = domain_data
@@ -231,22 +246,21 @@ def save_output(data, domain_data, base_filename, formats, is_user_enum=False):
                     for row in domain_data:
                         writer.writerow(row.values())
 
-    # XLSX
     if "xlsx" in formats or "all" in formats:
-        with pd.ExcelWriter(f"{base_filename}.xlsx", engine='xlsxwriter') as writer:
+        with pd.ExcelWriter(f"{base_filename}.xlsx", engine="xlsxwriter") as writer:
             if is_user_enum:
                 df_users = pd.DataFrame(data)
-                df_users.to_excel(writer, sheet_name='User Info', index=False)
+                df_users.to_excel(writer, sheet_name="User Info", index=False)
             else:
                 df_tenant = pd.DataFrame([data])
-                df_tenant.to_excel(writer, sheet_name='Tenant Info', index=False)
+                df_tenant.to_excel(writer, sheet_name="Tenant Info", index=False)
                 if domain_data:
                     df_domain = pd.DataFrame(domain_data)
-                    df_domain.to_excel(writer, sheet_name='Domain Info', index=False)
+                    df_domain.to_excel(writer, sheet_name="Domain Info", index=False)
 
 def aadint_recon_as_outsider(domain, output_file, output_extension):
     print("Starting tenant recon...")
-    
+
     tenant_id, tenant_region = get_tenant_id(domain)
     tenant_brand, desktop_sso_enabled = get_tenant_brand_and_sso(domain)
 
@@ -259,11 +273,14 @@ def aadint_recon_as_outsider(domain, output_file, output_extension):
         print("Failed to retrieve login information.")
         return
 
-    dns_mx = resolve_dns(domain, 'MX')
-    dns_txt = resolve_dns(domain, 'TXT')
+    dns_mx = resolve_dns(domain, "MX")
+    dns_txt = resolve_dns(domain, "TXT")
 
+    # If desktop_sso_enabled is False, inform the user of such as the entra-external-recon
     if not desktop_sso_enabled:
-        desktop_sso_display = "The status of the account cannot reliably be determined as the Desktop SSO feature is disabled."
+        desktop_sso_display = (
+            "Desktop SSO Disabled - Cannot reliably determine status of accounts associated with the target domain."
+        )
     else:
         desktop_sso_display = "True"
 
@@ -274,18 +291,26 @@ def aadint_recon_as_outsider(domain, output_file, output_extension):
         "desktop_sso_enabled": desktop_sso_display,
         "login_info": login_info,
         "dns_mx": dns_mx,
-        "dns_txt": dns_txt
+        "dns_txt": dns_txt,
     }
 
     table = PrettyTable()
-    table.field_names = ["Tenant ID", "Tenant Name", "Tenant Brand", "Tenant Region", "Desktop SSO Status"]
-    table.add_row([
-        tenant_id,
-        login_info.get('DomainName'),
-        tenant_brand,
-        tenant_region,
-        desktop_sso_display
-    ])
+    table.field_names = [
+        "Tenant ID",
+        "Tenant Name",
+        "Tenant Brand",
+        "Tenant Region",
+        "Desktop SSO Status",
+    ]
+    table.add_row(
+        [
+            tenant_id,
+            login_info.get("DomainName"),
+            tenant_brand,
+            tenant_region,
+            desktop_sso_display,
+        ]
+    )
     print(table)
 
     domain_list = get_tenant_domains(domain)
@@ -298,69 +323,101 @@ def aadint_recon_as_outsider(domain, output_file, output_extension):
         domain_table.field_names = ["Name", "DNS", "MX", "SPF", "Type", "STS"]
 
         for name in tqdm(domain_list, desc="Processing domains"):
-            dns = bool(resolve_dns(name, 'A'))
-            mx = bool("mail.protection.outlook.com" in [x.lower() for x in resolve_dns(name, 'MX')])
-            spf = bool(any("spf.protection.outlook.com" in txt for txt in resolve_dns(name, 'TXT')))
-
+            dns = bool(resolve_dns(name, "A"))
+            mx = bool(
+                "mail.protection.outlook.com"
+                in [x.lower() for x in resolve_dns(name, "MX")]
+            )
+            spf = bool(
+                any("spf.protection.outlook.com" in txt for txt in resolve_dns(name, "TXT"))
+            )
             identity_type = "Federated" if name != domain else "Managed"
             sts = f"sts.{name}" if identity_type == "Federated" else ""
             domain_table.add_row([name, dns, mx, spf, identity_type, sts])
-            domain_data.append({
-                "Name": name,
-                "DNS": dns,
-                "MX": mx,
-                "SPF": spf,
-                "Type": identity_type,
-                "STS": sts
-            })
+            domain_data.append(
+                {
+                    "Name": name,
+                    "DNS": dns,
+                    "MX": mx,
+                    "SPF": spf,
+                    "Type": identity_type,
+                    "STS": sts,
+                }
+            )
         print(domain_table)
 
     if output_file:
-        base_filename, ext = output_file.rsplit('.', 1) if '.' in output_file else (output_file, 'txt')
+        base_filename, ext = (
+            output_file.rsplit(".", 1) if "." in output_file else (output_file, "txt")
+        )
         # If user hasn't specified an extension with -e, use the one from output_file if present
-        formats = [ext] if (output_extension == "" and ext != "") else [output_extension] if output_extension else []
-        # If user specified "all" or an empty formats list, handle it
-        if output_extension == "all":
+        if output_extension == "" and ext != "":
+            formats = [ext]
+        elif output_extension == "all":
             formats = ["all"]
-        elif not formats:
+        elif output_extension:
+            formats = [output_extension]
+        else:
             formats = ["txt"]  # default
 
         save_output(tenant_info, domain_data, base_filename, formats)
 
 def aadint_user_enum_as_outsider(username, output_file, input_file, method, output_extension):
     if input_file:
-        with open(input_file, 'r') as f:
+        with open(input_file, "r") as f:
             usernames = [line.strip() for line in f if line.strip()]
     else:
         if username is None:
             print("Error: Username is required when input file is not provided.")
             return
-        if ',' in username:
-            usernames = [user.strip() for user in username.split(',')]
+        if "," in username:
+            usernames = [user.strip() for user in username.split(",")]
         else:
             usernames = [username]
 
+    print("Starting user enumeration...")
+
+    unique_domains = set()
+    for user in usernames:
+        if "@" in user:
+            domain_part = user.split("@", 1)[1].lower()
+            unique_domains.add(domain_part)
+
+    # Call get_tenant_brand_and_sso ONCE per domain; store results in dictionary
+    domain_sso_status = {}
+    for dom in unique_domains:
+        # We only care about the desktop_sso_enabled boolean here
+        _, desktop_sso_enabled = get_tenant_brand_and_sso(dom)
+        domain_sso_status[dom] = desktop_sso_enabled
+
+    # Enumerate each user, referencing the cached SSO status - this is how we avoid false positives when Desktop SSO is disabled
     results = []
 
-    print("Starting user enumeration...")
     # Wrap user enumeration loop with a progress bar
     for user in tqdm(usernames, desc="Enumerating users"):
-        if method == "normal":
-            credential_info = get_credential_type_info(user)
-            if credential_info:
-                if_exists_result = credential_info.get('IfExistsResult', -1)
-                exists = (if_exists_result == 0 or if_exists_result == 6)
-            else:
-                exists = False
-        elif method in ["login", "autologon"]:
+        if "@" in user:
+            user_domain = user.split("@", 1)[1].lower()
+        else:
+            user_domain = None
+
+        if user_domain and user_domain in domain_sso_status:
+            current_sso_status = domain_sso_status[user_domain]
+        else:
+            # If no domain or domain not in cache, default to True to allow normal checks
+            current_sso_status = True
+
+        if not current_sso_status:
+            user_result = "Desktop SSO Disabled - Cannot determine stats of account"
+        else:
             credential_info = get_credential_type_info(user)
             if credential_info:
                 if_exists_result = credential_info.get("IfExistsResult", -1)
-                exists = (if_exists_result == 0 or if_exists_result == 6)
+                exists_bool = (if_exists_result == 0 or if_exists_result == 6)
+                user_result = "True" if exists_bool else "False"
             else:
-                exists = False
+                user_result = "False"
 
-        results.append({"username": user, "exists": exists})
+        results.append({"username": user, "exists": user_result})
 
     table = PrettyTable()
     table.field_names = ["UserName", "Exists"]
@@ -369,20 +426,24 @@ def aadint_user_enum_as_outsider(username, output_file, input_file, method, outp
     print(table)
 
     if output_file:
-        base_filename, ext = output_file.rsplit('.', 1) if '.' in output_file else (output_file, 'txt')
+        base_filename, ext = (
+            output_file.rsplit(".", 1) if "." in output_file else (output_file, "txt")
+        )
         # If user hasn't specified an extension with -e, use the one from output_file if present
-        formats = [ext] if (output_extension == "" and ext != "") else [output_extension] if output_extension else []
-        # If user specified "all" or an empty formats list, handle it
-        if output_extension == "all":
+        if output_extension == "" and ext != "":
+            formats = [ext]
+        elif output_extension == "all":
             formats = ["all"]
-        elif not formats:
+        elif output_extension:
+            formats = [output_extension]
+        else:
             formats = ["txt"]  # default
 
         save_output(results, [], base_filename, formats, is_user_enum=True)
 
 if __name__ == "__main__":
     display_banner()
-    
+
     parser = argparse.ArgumentParser(
         description="AADInternals Invoke-AADIntReconAsOutsider and Invoke-AADIntUserEnumerationAsOutsider rewritten in Python3"
     )
@@ -409,7 +470,7 @@ if __name__ == "__main__":
         help="Verifies whether a single or multiple emails are active within an organisation"
     )
     enum_parser.add_argument("-u", "--username", help="Username (example: user@example.com)")
-    enum_parser.add_argument("-o", "--output", help="Output filename filename without extension")
+    enum_parser.add_argument("-o", "--output", help="Output filename without extension")
     enum_parser.add_argument("-f", "--file", help="Input file with list of email addresses")
     enum_parser.add_argument(
         "-e",
