@@ -276,7 +276,6 @@ def aadint_recon_as_outsider(domain, output_file, output_extension):
     dns_mx = resolve_dns(domain, "MX")
     dns_txt = resolve_dns(domain, "TXT")
 
-    # If desktop_sso_enabled is False, inform the user of such as the entra-external-recon
     if not desktop_sso_enabled:
         desktop_sso_display = (
             "Desktop SSO Disabled - Cannot reliably determine status of accounts associated with the target domain."
