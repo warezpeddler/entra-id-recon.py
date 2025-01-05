@@ -183,14 +183,6 @@ def get_credential_type_info(username):
         return None
 
 def save_output(data, domain_data, base_filename, formats, is_user_enum=False):
-    """
-    Saves the results to files in the specified formats.
-    :param data: The main data (dictionary for recon / list of dict for enumeration).
-    :param domain_data: The domain data (list of dictionaries) if recon, else empty list for user enumeration.
-    :param base_filename: Base name for the output file(s).
-    :param formats: List of formats to save (txt, json, csv, xlsx, or all).
-    :param is_user_enum: Whether it's user enumeration data or recon data.
-    """
     output_data = {"user_list" if is_user_enum else "tenant_info": data}
     if not is_user_enum:
         output_data["domain_data"] = domain_data
