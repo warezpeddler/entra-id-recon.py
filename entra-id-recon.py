@@ -12,8 +12,11 @@ import pyfiglet
 import pandas as pd
 import csv
 import xlsxwriter
+from tqdm import tqdm 
 
-# Credit for idea and Powershell code goes to Author of AADInternals, Nestori Syynimaa (@DrAzureAD), for which this script would not have been possible: https://github.com/Gerenios/AADInternals
+# Credit for idea and Powershell code goes to Author of AADInternals, Nestori Syynimaa (@DrAzureAD),
+# for which this script would not have been possible:
+# https://github.com/Gerenios/AADInternals
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 
@@ -75,11 +78,11 @@ def get_tenant_domains(domain):
         tenant_region_sub_scope = tenant_info.get('tenant_region_sub_scope')
         
         if tenant_region_sub_scope == "DOD":
-            autodiscover_url = "https://autodiscover-s-dod.office365.us/autodiscover/autodiscover.svc"  # DoD
+            autodiscover_url = "https://autodiscover-s-dod.office365.us/autodiscover/autodiscover.svc" 
         elif tenant_region_sub_scope == "DODCON":
-            autodiscover_url = "https://autodiscover-s.office365.us/autodiscover/autodiscover.svc"  # GCC-High
+            autodiscover_url = "https://autodiscover-s.office365.us/autodiscover/autodiscover.svc"
         else:
-            autodiscover_url = "https://autodiscover-s.outlook.com/autodiscover/autodiscover.svc"  # Commercial/WW
+            autodiscover_url = "https://autodiscover-s.outlook.com/autodiscover/autodiscover.svc"  
     else:
         return None
 
@@ -180,6 +183,7 @@ def save_output(data, domain_data, base_filename, formats, is_user_enum=False):
     if "json" in formats or "all" in formats:
         with open(f"{base_filename}.json", 'w') as f:
             json.dump(output_data, f, indent=4)
+
     if "txt" in formats or "all" in formats:
         with open(f"{base_filename}.txt", 'w') as f:
             if is_user_enum:
@@ -203,6 +207,7 @@ def save_output(data, domain_data, base_filename, formats, is_user_enum=False):
                 else:
                     for result in data:
                         f.write(f"username: {result['username']}, exists: {result['exists']}\n")
+
     if "csv" in formats or "all" in formats:
         with open(f"{base_filename}.csv", 'w', newline='') as f:
             writer = csv.writer(f)
@@ -225,6 +230,8 @@ def save_output(data, domain_data, base_filename, formats, is_user_enum=False):
                     writer.writerow(domain_data[0].keys())
                     for row in domain_data:
                         writer.writerow(row.values())
+
+    # XLSX
     if "xlsx" in formats or "all" in formats:
         with pd.ExcelWriter(f"{base_filename}.xlsx", engine='xlsxwriter') as writer:
             if is_user_enum:
@@ -238,6 +245,8 @@ def save_output(data, domain_data, base_filename, formats, is_user_enum=False):
                     df_domain.to_excel(writer, sheet_name='Domain Info', index=False)
 
 def aadint_recon_as_outsider(domain, output_file, output_extension):
+    print("Starting tenant recon...")
+    
     tenant_id, tenant_region = get_tenant_id(domain)
     tenant_brand, desktop_sso_enabled = get_tenant_brand_and_sso(domain)
 
@@ -253,36 +262,46 @@ def aadint_recon_as_outsider(domain, output_file, output_extension):
     dns_mx = resolve_dns(domain, 'MX')
     dns_txt = resolve_dns(domain, 'TXT')
 
+    if not desktop_sso_enabled:
+        desktop_sso_display = "The status of the account cannot reliably be determined as the Desktop SSO feature is disabled."
+    else:
+        desktop_sso_display = "True"
+
     tenant_info = {
         "tenant_id": tenant_id,
         "tenant_brand": tenant_brand,
         "tenant_region": tenant_region,
-        "desktop_sso_enabled": desktop_sso_enabled,
+        "desktop_sso_enabled": desktop_sso_display,
         "login_info": login_info,
         "dns_mx": dns_mx,
         "dns_txt": dns_txt
     }
 
     table = PrettyTable()
-    table.field_names = ["Tenant ID", "Tenant Name", "Tenant Brand", "Tenant Region", "Desktop SSO Enabled"]
+    table.field_names = ["Tenant ID", "Tenant Name", "Tenant Brand", "Tenant Region", "Desktop SSO Status"]
     table.add_row([
         tenant_id,
         login_info.get('DomainName'),
         tenant_brand,
         tenant_region,
-        desktop_sso_enabled
+        desktop_sso_display
     ])
     print(table)
 
     domain_list = get_tenant_domains(domain)
     domain_data = []
+
+    # Wrap domain enumeration in a progress bar
     if domain_list:
+        print("Enumerating domains...")
         domain_table = PrettyTable()
         domain_table.field_names = ["Name", "DNS", "MX", "SPF", "Type", "STS"]
-        for name in domain_list:
+
+        for name in tqdm(domain_list, desc="Processing domains"):
             dns = bool(resolve_dns(name, 'A'))
             mx = bool("mail.protection.outlook.com" in [x.lower() for x in resolve_dns(name, 'MX')])
             spf = bool(any("spf.protection.outlook.com" in txt for txt in resolve_dns(name, 'TXT')))
+
             identity_type = "Federated" if name != domain else "Managed"
             sts = f"sts.{name}" if identity_type == "Federated" else ""
             domain_table.add_row([name, dns, mx, spf, identity_type, sts])
@@ -298,7 +317,14 @@ def aadint_recon_as_outsider(domain, output_file, output_extension):
 
     if output_file:
         base_filename, ext = output_file.rsplit('.', 1) if '.' in output_file else (output_file, 'txt')
-        formats = [ext] if output_extension == "" else [output_extension]
+        # If user hasn't specified an extension with -e, use the one from output_file if present
+        formats = [ext] if (output_extension == "" and ext != "") else [output_extension] if output_extension else []
+        # If user specified "all" or an empty formats list, handle it
+        if output_extension == "all":
+            formats = ["all"]
+        elif not formats:
+            formats = ["txt"]  # default
+
         save_output(tenant_info, domain_data, base_filename, formats)
 
 def aadint_user_enum_as_outsider(username, output_file, input_file, method, output_extension):
@@ -316,19 +342,21 @@ def aadint_user_enum_as_outsider(username, output_file, input_file, method, outp
 
     results = []
 
-    for user in usernames:
+    print("Starting user enumeration...")
+    # Wrap user enumeration loop with a progress bar
+    for user in tqdm(usernames, desc="Enumerating users"):
         if method == "normal":
             credential_info = get_credential_type_info(user)
             if credential_info:
                 if_exists_result = credential_info.get('IfExistsResult', -1)
-                exists = if_exists_result == 0 or if_exists_result == 6
+                exists = (if_exists_result == 0 or if_exists_result == 6)
             else:
                 exists = False
-        elif method == "login" or method == "autologon":
+        elif method in ["login", "autologon"]:
             credential_info = get_credential_type_info(user)
             if credential_info:
                 if_exists_result = credential_info.get("IfExistsResult", -1)
-                exists = if_exists_result == 0 or if_exists_result == 6
+                exists = (if_exists_result == 0 or if_exists_result == 6)
             else:
                 exists = False
 
@@ -342,28 +370,61 @@ def aadint_user_enum_as_outsider(username, output_file, input_file, method, outp
 
     if output_file:
         base_filename, ext = output_file.rsplit('.', 1) if '.' in output_file else (output_file, 'txt')
-        formats = [ext] if output_extension == "" else [output_extension]
+        # If user hasn't specified an extension with -e, use the one from output_file if present
+        formats = [ext] if (output_extension == "" and ext != "") else [output_extension] if output_extension else []
+        # If user specified "all" or an empty formats list, handle it
+        if output_extension == "all":
+            formats = ["all"]
+        elif not formats:
+            formats = ["txt"]  # default
+
         save_output(results, [], base_filename, formats, is_user_enum=True)
 
 if __name__ == "__main__":
     display_banner()
     
-    parser = argparse.ArgumentParser(description="AADInternals Invoke-AADIntReconAsOutsider and Invoke-AADIntUserEnumerationAsOutsider rewritten in Python3")
+    parser = argparse.ArgumentParser(
+        description="AADInternals Invoke-AADIntReconAsOutsider and Invoke-AADIntUserEnumerationAsOutsider rewritten in Python3"
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     # Subparser for recon
-    recon_parser = subparsers.add_parser("entra-external-recon", help="Gather tenancy information based on an input target domain")
+    recon_parser = subparsers.add_parser(
+        "entra-external-recon",
+        help="Gather tenancy information based on an input target domain"
+    )
     recon_parser.add_argument("-d", "--domain", required=True, help="Domain name (example: example.com)")
     recon_parser.add_argument("-o", "--output", help="Output filename without extension")
-    recon_parser.add_argument("-e", "--extension", choices=["txt", "json", "csv", "xlsx", "all"], default="", help="Output format")
+    recon_parser.add_argument(
+        "-e",
+        "--extension",
+        choices=["txt", "json", "csv", "xlsx", "all"],
+        default="",
+        help="Output format"
+    )
 
     # Subparser for user enumeration
-    enum_parser = subparsers.add_parser("entra-external-enum", help="Verifies whether a single or multiple emails are active within an organisation")
+    enum_parser = subparsers.add_parser(
+        "entra-external-enum",
+        help="Verifies whether a single or multiple emails are active within an organisation"
+    )
     enum_parser.add_argument("-u", "--username", help="Username (example: user@example.com)")
     enum_parser.add_argument("-o", "--output", help="Output filename filename without extension")
     enum_parser.add_argument("-f", "--file", help="Input file with list of email addresses")
-    enum_parser.add_argument("-e", "--extension", choices=["txt", "json", "csv", "xlsx", "all"], default="", help="Output format")
-    enum_parser.add_argument("-m", "--method", choices=["normal", "login", "autologon"], default="normal", help="Login method")
+    enum_parser.add_argument(
+        "-e",
+        "--extension",
+        choices=["txt", "json", "csv", "xlsx", "all"],
+        default="",
+        help="Output format"
+    )
+    enum_parser.add_argument(
+        "-m",
+        "--method",
+        choices=["normal", "login", "autologon"],
+        default="normal",
+        help="Login method"
+    )
 
     args = parser.parse_args()
 
