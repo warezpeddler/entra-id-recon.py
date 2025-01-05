@@ -406,7 +406,7 @@ def aadint_user_enum_as_outsider(username, output_file, input_file, method, outp
             current_sso_status = True
 
         if not current_sso_status:
-            user_result = "Desktop SSO Disabled - Cannot determine stats of account"
+            user_result = "Desktop SSO Disabled - Cannot reliably determine status of accounts associated with the target domain."
         else:
             credential_info = get_credential_type_info(user)
             if credential_info:
